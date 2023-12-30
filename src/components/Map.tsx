@@ -26,38 +26,23 @@ export default function Map() {
                 zoom: 6,
             });
             infoWindow = new google.maps.InfoWindow();
-
+            
+            const locationIcon = ReactDOMServer.renderToString(<LocationOnOutlinedIcon />);
             const locationButton = document.createElement("button");
+            locationButton.style.width = "40px";
+            locationButton.style.height = "40px";
+            locationButton.style.textAlign = "center";
+            locationButton.style.verticalAlign = "middle";
+            locationButton.style.backgroundColor = "rgb(255, 255, 255)";
+            locationButton.style.borderRadius = "2px";
+            locationButton.style.boxShadow = "rgba(0, 0, 0, 0.3) 0px 1px 4px -1px";
+            locationButton.style.marginRight = "10px";
 
-            locationButton.textContent = "Get My Current Location";
-            locationButton.style.color = "rgb(0, 0, 0)";
+            locationButton.innerHTML = locationIcon;
 
-            map.controls[google.maps.ControlPosition.TOP_CENTER].push(locationButton);
+            locationButton.addEventListener("click", handleGetLocation);
 
-            locationButton.addEventListener("click", () => {
-            // Try HTML5 geolocation.
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                (position: GeolocationPosition) => {
-                    const pos = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude,
-                    };
-
-                    infoWindow.setPosition(pos);
-                    infoWindow.setContent("Location found.");
-                    infoWindow.open(map);
-                    map.setCenter(pos);
-                },
-                () => {
-                    handleLocationError(true, infoWindow, map.getCenter()!);
-                }
-                );
-            } else {
-                // Browser doesn't support Geolocation
-                handleLocationError(false, infoWindow, map.getCenter()!);
-            }
-            });
+            map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(locationButton);
         };
 
         function handleLocationError(
