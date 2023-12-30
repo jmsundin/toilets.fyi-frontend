@@ -10,29 +10,14 @@ import ListView from '@/components/ListView';
 import Map from '@/components/Map';
 
 
-export default function Home() {
-  // TODO: get user location
-  // TODO: get toilet data from the server based on user location
-  // TODO: create a list view of toilets near the user
-  
-  const toilets = [
-    {
-      "id": 1,
-      "name": "Toilet 1",
-      "location": {
-        "lat": 0,
-        "lng": 0
-      },
-      "rating": 5,
-      "reviews": [
-        {
-          "id": 1,
-          "rating": 5,
-          "comment": "This is a great toilet!"
-        }
-      ]
-    }
-  ];
+export default function Home(props: { items: Toilet[] }) {
+  const items = props.items;
+  const [showMap, setShowMap] = useState<boolean>(false);
+
+  const handleShowMapClick = (e) => {
+    e.preventDefault();
+    setShowMap(true);
+  }
 
   return (
     <Fragment>
