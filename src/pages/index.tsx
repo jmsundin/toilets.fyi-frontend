@@ -1,5 +1,12 @@
 import Image from 'next/image';
-import { Fragment, useEffect } from 'react';
+import Link from 'next/link';
+import { Fragment, useEffect, useState } from 'react';
+
+import logo from '../../public/logo.svg';
+import generic_img_filler from '../../public/generic_img_filler.svg';
+
+import { Toilet } from '@/types/index';
+import ListView from '@/components/ListView';
 import Map from '@/components/Map';
 
 
