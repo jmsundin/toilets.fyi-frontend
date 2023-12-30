@@ -45,22 +45,52 @@ export default function Map() {
             map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(locationButton);
         };
 
-        function handleLocationError(
-            browserHasGeolocation: boolean,
-            infoWindow: google.maps.InfoWindow,
-            pos: google.maps.LatLng
-        ) {
-            infoWindow.setPosition(pos);
-            infoWindow.setContent(
-            browserHasGeolocation
-                ? "Error: The Geolocation service failed."
-                : "Error: Your browser doesn't support geolocation."
-            );
-            infoWindow.open(map);
-        }
     }, []);
 
     return (
-        <div id="map" className="w-full h-full"></div>
+        <Fragment>
+            <div id="map" className="w-full h-full"></div>
+            <Script src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&callback=initMap&v=weekly`} strategy="afterInteractive"></Script>
+        </Fragment>
     );
+}
+
+function handleGetLocation() {
+    // Try HTML5 geolocation.
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+        (position: GeolocationPosition) => {
+            const pos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            };
+
+            infoWindow.setPosition(pos);
+            infoWindow.setContent("Location found.");
+            infoWindow.open(map);
+            map.setCenter(pos);
+            map.setZoom(15);
+        },
+        () => {
+            handleLocationError(true, infoWindow, map.getCenter()!);
+        }
+        );
+    } else {
+        // Browser doesn't support Geolocation
+        handleLocationError(false, infoWindow, map.getCenter()!);
+    }
+};
+
+function handleLocationError(
+    browserHasGeolocation: boolean,
+    infoWindow: google.maps.InfoWindow,
+    pos: google.maps.LatLng
+) {
+    infoWindow.setPosition(pos);
+    infoWindow.setContent(
+    browserHasGeolocation
+        ? "Error: The Geolocation service failed."
+        : "Error: Your browser doesn't support geolocation."
+    );
+    infoWindow.open(map);
 }
