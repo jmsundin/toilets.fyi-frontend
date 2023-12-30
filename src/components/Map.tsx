@@ -1,4 +1,9 @@
-import { useEffect } from "react";
+import { Fragment, useRef, useEffect } from "react";
+import ReactDOMServer from 'react-dom/server';
+// import NearMeIcon from '@mui/icons-material/NearMe';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+
+import Script from 'next/script';
 
 let map: google.maps.Map, infoWindow: google.maps.InfoWindow;
 
@@ -10,7 +15,6 @@ declare global {
 }
 
 export default function Map() {
-
     useEffect(() => {
         const div = document.getElementById('__next');
         div!.classList.add('h-full');
