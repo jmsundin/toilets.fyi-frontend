@@ -31,10 +31,20 @@ export default function Home(props: { items: Toilet[] }) {
               <input type="text" className="w-full h-full rounded-2xl border-2 p-4 placeholder:text-lg placeholder:text-sans" placeholder="Search or filter toilets" />
             </div>
           </nav>
-        </header>
-        <main className="w-full" style={{"height": "calc(100svh - 4rem)"}}>
-          <Map />
-        </main>
+      </header>
+      <main className="absolute top-32 w-full" style={{"height": "calc(100svh - 4rem)"}}>
+      { !showMap ? 
+        <section className="w-full h-full">
+          <ListView items={items} />
+        </section>
+        : <Map />
+      }
+      </main>
+      <footer className="fixed bottom-0 w-full h-16">
+        <div className="flex justify-center w-full h-full">
+          <button onClick={handleShowMapClick} className="w-24 h-12 border-2 rounded-2xl"  style={{"background": "hsl(var(--background)"}}>Map View</button>
+        </div> 
+      </footer>
     </Fragment>
       );
 };
