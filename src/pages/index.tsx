@@ -46,5 +46,104 @@ export default function Home(props: { items: Toilet[] }) {
         </div> 
       </footer>
     </Fragment>
-      );
+    );
+};
+
+export async function getServerSideProps() {
+  const response = await fetch('http://localhost:3000/api/toilets');
+  const data = await response.json();
+  console.log(data);
+
+  if (data.length > 0) {
+    return {
+      props: { items: data }
+    };
+    
+  } else {
+    return {
+      props: {
+          items: [
+            {
+              id: 1,
+              site: "Toilet in Park 1",
+              address: "123 Park Ave",
+              latitude: 40.748817,
+              longitude: -73.985428,
+              public: true,
+              hours: new Date(),
+              content: "Nice bathroom",
+              images: [generic_img_filler],
+              updatedAt: new Date(),
+              createdAt: new Date(),
+            },
+            {
+              id: 2,
+              site: "Toilet in Park 2",
+              address: "123 Park Ave",
+              latitude: 40.748817,
+              longitude: -73.985428,
+              public: true,
+              hours: new Date(),
+              content: "Nice bathroom",
+              images: [generic_img_filler],
+              updatedAt: new Date(),
+              createdAt: new Date(),
+            },
+            {
+              id: 3,
+              site: "Toilet in Park 3",
+              address: "123 Park Ave",
+              latitude: 40.748817,
+              longitude: -73.985428,
+              public: true,
+              hours: new Date(),
+              content: "Nice bathroom",
+              images: [generic_img_filler],
+              updatedAt: new Date(),
+              createdAt: new Date(),
+            },
+            {
+              id: 4,
+              site: "Toilet in Park 4",
+              address: "123 Park Ave",
+              latitude: 40.748817,
+              longitude: -73.985428,
+              public: true,
+              hours: new Date(),
+              content: "Nice bathroom",
+              images: [generic_img_filler],
+              updatedAt: new Date(),
+              createdAt: new Date(),
+            },
+            {
+              id: 5,
+              site: "Toilet in Park 5",
+              address: "123 Park Ave",
+              latitude: 40.748817,
+              longitude: -73.985428,
+              public: true,
+              hours: new Date(),
+              content: "Nice bathroom",
+              images: [generic_img_filler],
+              updatedAt: new Date(),
+              createdAt: new Date(),
+            },
+            {
+              id: 6,
+              site: "Toilet in Park 6",
+              address: "123 Park Ave",
+              latitude: 40.748817,
+              longitude: -73.985428,
+              public: true,
+              hours: new Date(),
+              content: "Nice bathroom",
+              images: [generic_img_filler],
+              updatedAt: new Date(),
+              createdAt: new Date(),
+            },
+          ]
+      }
+  }
+}
+  
 };
