@@ -21,10 +21,14 @@ export default function Home(props: { items: Toilet[] }) {
 
   return (
     <Fragment>
-      <header className="w-full h-16">
-          <nav className="w-full h-full pt-4 pl-6 pr-6">
-            <div className="w-full h-full">
-              <input type="text" className="w-full h-full rounded-md p-2" placeholder="Search for a toilet" />
+      <header className="z-10 fixed top-0 w-full h-32">
+          <nav className="flex flex-col gap-4 w-full h-full pt-4 pl-6 pr-6" style={{"background": "hsl(var(--background)"}}>
+            <Link href="/" className="flex flex-row gap-4 items-center" aria-label="logo">
+              <Image src={logo} width={40} height={40} alt="logo" />
+              <span className="text-2xl font-sans">toilets.fyi</span>
+            </Link>
+            <div className="w-full h-16">
+              <input type="text" className="w-full h-full rounded-2xl border-2 p-4 placeholder:text-lg placeholder:text-sans" placeholder="Search or filter toilets" />
             </div>
           </nav>
         </header>
