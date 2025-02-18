@@ -1,0 +1,17 @@
+{
+  "name": "toilets-fyi-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "@vercel/postgres": "^0.5.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+} 
