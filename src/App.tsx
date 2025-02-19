@@ -2,15 +2,44 @@ import './App.css'
 import { FiMenu, FiSearch, FiNavigation, FiMapPin } from 'react-icons/fi'
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { LatLngExpression } from 'leaflet'
-import { useState } from 'react'
+import { LatLngExpression, Icon } from 'leaflet'
+import { useState, useEffect } from 'react'
+import { LocationModal } from './components/LocationModal'
+import { Toilet } from './types'
 
 // Los Angeles coordinates
 const LA_CENTER: LatLngExpression = [34.0522, -118.2437]
 const ZOOM_LEVEL = 13
 
+// Custom icon for user location
+const userIcon = new Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
 function App() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [toilets, setToilets] = useState<Toilet[]>([]);
+  const [selectedToilet, setSelectedToilet] = useState<Toilet | null>(null);
+
+  useEffect(() => {
+    const fetchToilets = async () => {
+      try {
+        const response = await fetch('/api/toilets');
+        const data = await response.json();
+        console.log('Fetched toilets:', data); // Debug log
+        setToilets(data);
+      } catch (error) {
+        console.error('Error fetching toilets:', error);
+      }
+    };
+
+    fetchToilets();
+  }, []);
 
   const MapController = ({ coords }: { coords: [number, number] }) => {
     const map = useMap();
@@ -42,6 +71,15 @@ function App() {
     }
   }
 
+  // Helper function to validate coordinates
+  const isValidCoordinate = (lat: string, lng: string): boolean => {
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    return !isNaN(latitude) && !isNaN(longitude) &&
+           latitude >= -90 && latitude <= 90 &&
+           longitude >= -180 && longitude <= 180;
+  };
+
   return (
     <div className="map-container">
       <div className="search-container">
@@ -61,19 +99,21 @@ function App() {
           </button>
         </div>
         
-        <div className="action-buttons">
-          <button className="action-button" aria-label="Get directions">
-            <FiNavigation size={20} />
-          </button>
-          
-          <button 
-            className="action-button"
-            onClick={handleLocationRequest}
-            aria-label="Get current location"
-          >
-            <FiMapPin size={20} />
-          </button>
-        </div>
+        {!selectedToilet && (
+          <div className="action-buttons">
+            <button className="action-button" aria-label="Get directions">
+              <FiNavigation size={20} />
+            </button>
+            
+            <button 
+              className="action-button"
+              onClick={handleLocationRequest}
+              aria-label="Get current location"
+            >
+              <FiMapPin size={20} />
+            </button>
+          </div>
+        )}
       </div>
       
       <MapContainer 
@@ -89,10 +129,32 @@ function App() {
         {userLocation && (
           <>
             <MapController coords={userLocation} />
-            <Marker position={userLocation} />
+            <Marker position={userLocation} icon={userIcon} />
           </>
         )}
+        {toilets
+          .filter(toilet => isValidCoordinate(toilet.latitude, toilet.longitude))
+          .map((toilet) => {
+            const lat = parseFloat(toilet.latitude);
+            const lng = parseFloat(toilet.longitude);
+            return (
+              <Marker
+                key={toilet.id}
+                position={[lat, lng]}
+                eventHandlers={{
+                  click: () => setSelectedToilet(toilet),
+                }}
+              />
+            );
+        })}
       </MapContainer>
+
+      {selectedToilet && (
+        <LocationModal
+          toilet={selectedToilet}
+          onClose={() => setSelectedToilet(null)}
+        />
+      )}
     </div>
   )
 }
