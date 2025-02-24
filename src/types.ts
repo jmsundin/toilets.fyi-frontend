@@ -10,4 +10,7 @@ export interface Toilet {
   longitude: string;
   created_at: string;
   updated_at: string;
+  location_description?: string;
+  phone?: string;
+  additional_notes?: string;
 } 

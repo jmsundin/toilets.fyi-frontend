@@ -2,10 +2,16 @@ import './App.css'
 import { FiMenu, FiSearch, FiNavigation, FiMapPin } from 'react-icons/fi'
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
 import { LatLngExpression, Icon } from 'leaflet'
 import { useState, useEffect } from 'react'
 import { LocationModal } from './components/LocationModal'
 import { Toilet } from './types'
+import L from 'leaflet'
+import 'leaflet-routing-machine'
+import { RoutingMachine } from './components/RoutingMachine'
+import { FaRestroom } from 'react-icons/fa'
+import ReactDOMServer from 'react-dom/server'
 
 // Los Angeles coordinates
 const LA_CENTER: LatLngExpression = [34.0522, -118.2437]
@@ -21,10 +27,54 @@ const userIcon = new Icon({
   shadowSize: [41, 41]
 });
 
+// Replace the existing toilet icon definitions with:
+const createToiletIcon = (isSelected: boolean) => {
+  const iconHtml = ReactDOMServer.renderToString(
+    <FaRestroom 
+      size={isSelected ? 32 : 20}
+      color={isSelected ? '#ff4444' : '#0b57d0'}
+    />
+  );
+
+  return L.divIcon({
+    html: `<div style="
+      background-color: white;
+      border-radius: 50%;
+      width: ${isSelected ? '56px' : '32px'};
+      height: ${isSelected ? '56px' : '32px'};
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid ${isSelected ? '#ff4444' : '#0b57d0'};
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+    ">${iconHtml}</div>`,
+    className: '',
+    iconSize: [isSelected ? 56 : 32, isSelected ? 56 : 32],
+    iconAnchor: [isSelected ? 28 : 16, isSelected ? 28 : 16]
+  });
+};
+
+// Add this interface near your other types
+interface UserLocation {
+  id: number;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  accessible: false;
+  unisex: false;
+  latitude: string;
+  longitude: string;
+  created_at: string;
+  updated_at: string;
+}
+
 function App() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [toilets, setToilets] = useState<Toilet[]>([]);
   const [selectedToilet, setSelectedToilet] = useState<Toilet | null>(null);
+  const [showDirections, setShowDirections] = useState(false);
+  const [shouldCenterUser, setShouldCenterUser] = useState(false);
 
   useEffect(() => {
     const fetchToilets = async () => {
@@ -43,20 +93,26 @@ function App() {
 
   const MapController = ({ coords }: { coords: [number, number] }) => {
     const map = useMap();
-    map.setView(coords, ZOOM_LEVEL);
+    
+    useEffect(() => {
+      if (shouldCenterUser) {
+        map.setView(coords, ZOOM_LEVEL);
+        setShouldCenterUser(false);
+      }
+    }, [map, coords, shouldCenterUser]);
+
     return null;
   };
 
   const handleLocationRequest = () => {
-    // Request user's location
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
           setUserLocation([latitude, longitude]);
+          setShouldCenterUser(true);
         },
         (error) => {
-          // Error callback
           console.error('Error getting location:', error);
           alert('Unable to retrieve your location. Please make sure location services are enabled.');
         },
@@ -80,14 +136,44 @@ function App() {
            longitude >= -180 && longitude <= 180;
   };
 
+  // Add handleGetDirections function
+  const handleGetDirections = (destination: { lat: string; lng: string }) => {
+    if (!userLocation) {
+      handleLocationRequest();
+      return;
+    }
+
+    const [userLat, userLng] = userLocation;
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}&destination=${destination.lat},${destination.lng}&travelmode=walking`;
+    
+    window.open(googleMapsUrl, '_blank');
+  };
+
+  const handleUserMarkerClick = () => {
+    if (!userLocation) return;
+    
+    // Create a UserLocation object from the current location
+    const userLocationData: Toilet = {
+      id: -1, // Use negative ID to distinguish from toilet locations
+      name: "My Location",
+      street: `Latitude: ${userLocation[0].toFixed(6)}`,
+      city: `Longitude: ${userLocation[1].toFixed(6)}`,
+      state: "",
+      accessible: false,
+      unisex: false,
+      latitude: userLocation[0].toString(),
+      longitude: userLocation[1].toString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    setSelectedToilet(userLocationData);
+  };
+
   return (
     <div className="map-container">
       <div className="search-container">
         <div className="search-bar">
-          {/* <button className="icon-button" aria-label="Menu">
-            <FiMenu size={20} />
-          </button> */}
-          
           <input 
             type="text" 
             className="search-input"
@@ -97,23 +183,21 @@ function App() {
           <button className="icon-button" aria-label="Search">
             <FiSearch size={20} />
           </button>
-        </div>
-        
-        {!selectedToilet && (
-          <div className="action-buttons">
-            <button className="action-button" aria-label="Get directions">
+
+          {!selectedToilet && (
+            <button className="icon-button" aria-label="Get directions">
               <FiNavigation size={20} />
             </button>
-            
-            <button 
-              className="action-button"
-              onClick={handleLocationRequest}
-              aria-label="Get current location"
-            >
-              <FiMapPin size={20} />
-            </button>
-          </div>
-        )}
+          )}
+
+          <button 
+            className="icon-button location-icon"
+            onClick={handleLocationRequest}
+            aria-label="Get current location"
+          >
+            <FiMapPin size={20} />
+          </button>
+        </div>
       </div>
       
       <MapContainer 
@@ -129,7 +213,13 @@ function App() {
         {userLocation && (
           <>
             <MapController coords={userLocation} />
-            <Marker position={userLocation} icon={userIcon} />
+            <Marker 
+              position={userLocation} 
+              icon={userIcon}
+              eventHandlers={{
+                click: handleUserMarkerClick
+              }}
+            />
           </>
         )}
         {toilets
@@ -141,18 +231,33 @@ function App() {
               <Marker
                 key={toilet.id}
                 position={[lat, lng]}
+                icon={createToiletIcon(selectedToilet?.id === toilet.id)}
                 eventHandlers={{
                   click: () => setSelectedToilet(toilet),
                 }}
               />
             );
         })}
+        
+        {/* {showDirections && userLocation && selectedToilet && (
+          <RoutingMachine 
+            userLocation={userLocation}
+            destination={[
+              parseFloat(selectedToilet.latitude),
+              parseFloat(selectedToilet.longitude)
+            ]}
+          />
+        )} */}
       </MapContainer>
 
       {selectedToilet && (
         <LocationModal
           toilet={selectedToilet}
-          onClose={() => setSelectedToilet(null)}
+          onClose={() => {
+            setSelectedToilet(null);
+            setShowDirections(false);
+          }}
+          onGetDirections={handleGetDirections}
         />
       )}
     </div>
