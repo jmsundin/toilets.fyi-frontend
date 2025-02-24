@@ -1,17 +1,21 @@
 import './App.css'
-import { FiMenu, FiSearch, FiNavigation, FiMapPin } from 'react-icons/fi'
+import { FiMenu, FiSearch, FiNavigation, FiMapPin, FiFilter } from 'react-icons/fi'
 import { MapContainer, TileLayer, useMap, Marker } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
 import { LatLngExpression, Icon } from 'leaflet'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { LocationModal } from './components/LocationModal'
 import { Toilet } from './types'
 import L from 'leaflet'
 import 'leaflet-routing-machine'
-import { RoutingMachine } from './components/RoutingMachine'
+// import { RoutingMachine } from './components/RoutingMachine'
 import { FaRestroom } from 'react-icons/fa'
 import ReactDOMServer from 'react-dom/server'
+import Fuse from 'fuse.js'
+import { SearchResults } from './components/SearchResults'
+import { debounce } from 'lodash'
+import { FilterModal } from './components/FilterModal'
 
 // Los Angeles coordinates
 const LA_CENTER: LatLngExpression = [34.0522, -118.2437]
@@ -75,6 +79,14 @@ function App() {
   const [selectedToilet, setSelectedToilet] = useState<Toilet | null>(null);
   const [showDirections, setShowDirections] = useState(false);
   const [shouldCenterUser, setShouldCenterUser] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Toilet[]>([]);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([34.0522, -118.2437]);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filters, setFilters] = useState({
+    accessible: false,
+    unisex: false
+  });
 
   useEffect(() => {
     const fetchToilets = async () => {
@@ -97,6 +109,7 @@ function App() {
     useEffect(() => {
       if (shouldCenterUser) {
         map.setView(coords, ZOOM_LEVEL);
+        setMapCenter(coords);
         setShouldCenterUser(false);
       }
     }, [map, coords, shouldCenterUser]);
@@ -170,6 +183,65 @@ function App() {
     setSelectedToilet(userLocationData);
   };
 
+  // Initialize Fuse instance
+  const fuse = new Fuse(toilets, {
+    keys: [
+      'name',
+      'street',
+      'city',
+      'state',
+      'location_description',
+      { name: 'accessible', getFn: (toilet) => toilet.accessible ? 'accessible' : '' },
+      { name: 'unisex', getFn: (toilet) => toilet.unisex ? 'gender neutral' : '' }
+    ],
+    threshold: 0.3,
+    includeScore: true
+  });
+
+  // Add a function to filter toilets based on current filters
+  const getFilteredToilets = useCallback(() => {
+    return toilets.filter(toilet => 
+      (!filters.accessible || toilet.accessible) &&
+      (!filters.unisex || toilet.unisex)
+    );
+  }, [toilets, filters]);
+
+  // Update the search function to use filtered toilets
+  const debouncedSearch = useCallback(
+    debounce((query: string) => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        return;
+      }
+      const filteredResults = fuse.search(query)
+        .map(result => result.item)
+        .filter(toilet => 
+          (!filters.accessible || toilet.accessible) &&
+          (!filters.unisex || toilet.unisex)
+        );
+      setSearchResults(filteredResults);
+    }, 500),
+    [toilets, filters]
+  );
+
+  // Handle search input
+  const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    debouncedSearch(query);
+  };
+
+  // Handle search result click
+  const handleResultClick = (toilet: Toilet) => {
+    const lat = parseFloat(toilet.latitude);
+    const lng = parseFloat(toilet.longitude);
+    
+    setSelectedToilet(toilet);
+    setSearchQuery('');
+    setSearchResults([]);
+    setMapCenter([lat, lng]);
+  };
+
   return (
     <div className="map-container">
       <div className="search-container">
@@ -178,8 +250,18 @@ function App() {
             type="text" 
             className="search-input"
             placeholder="Search for toilets..."
+            value={searchQuery}
+            onChange={handleSearchInput}
           />
           
+          <button 
+            className="icon-button"
+            onClick={() => setShowFilterModal(true)}
+            aria-label="Filter"
+          >
+            <FiFilter size={20} />
+          </button>
+
           <button className="icon-button" aria-label="Search">
             <FiSearch size={20} />
           </button>
@@ -198,10 +280,15 @@ function App() {
             <FiMapPin size={20} />
           </button>
         </div>
+        
+        <SearchResults 
+          results={searchResults}
+          onResultClick={handleResultClick}
+        />
       </div>
       
       <MapContainer 
-        center={LA_CENTER} 
+        center={mapCenter} 
         zoom={ZOOM_LEVEL} 
         style={{ height: '100%', width: '100%' }}
         zoomControl={false}
@@ -210,19 +297,17 @@ function App() {
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.carto.com/">CARTO</a>'
         />
+        <MapController coords={userLocation || mapCenter} />
         {userLocation && (
-          <>
-            <MapController coords={userLocation} />
-            <Marker 
-              position={userLocation} 
-              icon={userIcon}
-              eventHandlers={{
-                click: handleUserMarkerClick
-              }}
-            />
-          </>
+          <Marker 
+            position={userLocation} 
+            icon={userIcon}
+            eventHandlers={{
+              click: handleUserMarkerClick
+            }}
+          />
         )}
-        {toilets
+        {getFilteredToilets()
           .filter(toilet => isValidCoordinate(toilet.latitude, toilet.longitude))
           .map((toilet) => {
             const lat = parseFloat(toilet.latitude);
@@ -258,6 +343,17 @@ function App() {
             setShowDirections(false);
           }}
           onGetDirections={handleGetDirections}
+        />
+      )}
+
+      {showFilterModal && (
+        <FilterModal
+          onClose={() => setShowFilterModal(false)}
+          filters={filters}
+          onFilterChange={(newFilters) => {
+            setFilters(newFilters);
+            debouncedSearch(searchQuery);
+          }}
         />
       )}
     </div>
