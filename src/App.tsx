@@ -16,6 +16,10 @@ import Fuse from 'fuse.js'
 import { SearchResults } from './components/SearchResults'
 import { debounce } from 'lodash'
 import { FilterModal } from './components/FilterModal'
+import { SlideMenu } from './components/SlideMenu'
+import { Session } from '@supabase/supabase-js'
+import { supabase } from './supabaseClient'
+import axios from 'axios'
 
 // Los Angeles coordinates
 const LA_CENTER: LatLngExpression = [34.0522, -118.2437]
@@ -73,6 +77,45 @@ interface UserLocation {
   updated_at: string;
 }
 
+// Add these new interfaces
+interface UserProfile {
+  id: string;
+  favorites: number[];  // toilet IDs
+  comments: Comment[];
+}
+
+interface Comment {
+  id: number;
+  toiletId: number;
+  text: string;
+  createdAt: string;
+}
+
+// Add this interface for Nominatim search results
+interface NominatimResult {
+  place_id: number;
+  licence: string;
+  osm_type: string;
+  osm_id: number;
+  boundingbox: string[];
+  lat: string;
+  lon: string;
+  display_name: string;
+  class: string;
+  type: string;
+  importance: number;
+}
+
+// Add a new icon for searched locations
+const searchedLocationIcon = new Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
 function App() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [toilets, setToilets] = useState<Toilet[]>([]);
@@ -87,13 +130,30 @@ function App() {
     accessible: false,
     unisex: false
   });
+  const [userToilets, setUserToilets] = useState<Toilet[]>([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [addressResults, setAddressResults] = useState<NominatimResult[]>([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [searchedLocation, setSearchedLocation] = useState<[number, number] | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const fetchToilets = async () => {
       try {
         const response = await fetch('/api/toilets');
         const data = await response.json();
-        console.log('Fetched toilets:', data); // Debug log
         setToilets(data);
       } catch (error) {
         console.error('Error fetching toilets:', error);
@@ -113,6 +173,11 @@ function App() {
         setShouldCenterUser(false);
       }
     }, [map, coords, shouldCenterUser]);
+
+    // Add this effect to respond to mapCenter changes
+    useEffect(() => {
+      map.setView(mapCenter, ZOOM_LEVEL);
+    }, [map, mapCenter]);
 
     return null;
   };
@@ -224,11 +289,49 @@ function App() {
     [toilets, filters]
   );
 
-  // Handle search input
+  // Add this function to search for addresses using Nominatim
+  const searchAddresses = useCallback(
+    debounce(async (query: string) => {
+      if (!query.trim() || query.length < 3) {
+        setAddressResults([]);
+        return;
+      }
+      
+      setIsSearchingAddress(true);
+      try {
+        const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: {
+            q: query,
+            format: 'json',
+            addressdetails: 1,
+            limit: 5,
+            countrycodes: 'us' // Limit to US addresses
+          },
+          headers: {
+            'User-Agent': 'ToiletFinderApp' // Required by Nominatim's usage policy
+          }
+        });
+        
+        setAddressResults(response.data);
+      } catch (error) {
+        console.error('Error searching addresses:', error);
+      } finally {
+        setIsSearchingAddress(false);
+      }
+    }, 500),
+    []
+  );
+
+  // Update the handleSearchInput function
   const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
+    
+    // Search for toilets in our database
     debouncedSearch(query);
+    
+    // Also search for addresses using Nominatim
+    searchAddresses(query);
   };
 
   // Handle search result click
@@ -242,14 +345,107 @@ function App() {
     setMapCenter([lat, lng]);
   };
 
+  // Update function to handle address selection
+  const handleAddressSelect = (result: NominatimResult) => {
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
+    
+    // Create a temporary "toilet" object to display in the modal
+    const addressLocation: Toilet = {
+      id: -2, // Use -2 to distinguish from user location (-1) and actual toilets
+      name: "Searched Location",
+      street: result.display_name.split(',')[0],
+      city: '',
+      state: '',
+      accessible: false,
+      unisex: false,
+      latitude: result.lat,
+      longitude: result.lon,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    // Set the selected toilet and searched location
+    setSelectedToilet(addressLocation);
+    setSearchedLocation([lat, lng]);
+    
+    // Clear search results
+    setSearchQuery('');
+    setAddressResults([]);
+    setSearchResults([]);
+    
+    // Center the map on the selected location
+    setMapCenter([lat, lng]);
+  };
+
+  // Update submission handler
+  const handleToiletSubmission = async (newToilet: Omit<Toilet, 'id' | 'created_at' | 'updated_at'>) => {
+    if (!session) {
+      alert('Please login to submit a toilet location');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/toilets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ ...newToilet, user_id: session.user.id })
+      });
+
+      if (!response.ok) throw new Error('Failed to submit toilet');
+      const data = await response.json();
+      setToilets(prev => [...prev, data]);
+    } catch (error) {
+      console.error('Error submitting toilet:', error);
+      alert('Failed to submit toilet location');
+    }
+  };
+
+  // Update edit handler
+  const handleToiletEdit = async (toiletId: number, updates: Partial<Toilet>) => {
+    if (!session) {
+      alert('Please login to edit toilet locations');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/toilets/${toiletId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) throw new Error('Failed to update toilet');
+      const data = await response.json();
+      setToilets(prev => prev.map(t => t.id === toiletId ? data : t));
+    } catch (error) {
+      console.error('Error updating toilet:', error);
+      alert('Failed to update toilet location');
+    }
+  };
+
   return (
     <div className="map-container">
       <div className="search-container">
         <div className="search-bar">
+          <button 
+            className="icon-button"
+            onClick={() => setIsMenuOpen(true)}
+            aria-label="Menu"
+          >
+            <FiMenu size={20} />
+          </button>
+
           <input 
             type="text" 
             className="search-input"
-            placeholder="Search for toilets..."
+            placeholder="Search for toilets or addresses..."
             value={searchQuery}
             onChange={handleSearchInput}
           />
@@ -283,7 +479,10 @@ function App() {
         
         <SearchResults 
           results={searchResults}
+          addressResults={addressResults}
           onResultClick={handleResultClick}
+          onAddressClick={handleAddressSelect}
+          isSearchingAddress={isSearchingAddress}
         />
       </div>
       
@@ -298,6 +497,8 @@ function App() {
           attribution='&copy; <a href="https://www.carto.com/">CARTO</a>'
         />
         <MapController coords={userLocation || mapCenter} />
+        
+        {/* User location marker */}
         {userLocation && (
           <Marker 
             position={userLocation} 
@@ -307,6 +508,44 @@ function App() {
             }}
           />
         )}
+        
+        {/* Searched location marker */}
+        {searchedLocation && (
+          <Marker 
+            position={searchedLocation} 
+            icon={searchedLocationIcon}
+            eventHandlers={{
+              click: () => {
+                // If we have a selected toilet with id -2, it's our searched location
+                if (selectedToilet && selectedToilet.id === -2) {
+                  // The marker is already selected, do nothing
+                } else {
+                  // Find the searched location toilet object and select it
+                  const lat = searchedLocation[0].toString();
+                  const lng = searchedLocation[1].toString();
+                  
+                  const searchedLocationData: Toilet = {
+                    id: -2,
+                    name: "Searched Location",
+                    street: "Searched Address",
+                    city: '',
+                    state: '',
+                    accessible: false,
+                    unisex: false,
+                    latitude: lat,
+                    longitude: lng,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  };
+                  
+                  setSelectedToilet(searchedLocationData);
+                }
+              }
+            }}
+          />
+        )}
+        
+        {/* Toilet markers */}
         {getFilteredToilets()
           .filter(toilet => isValidCoordinate(toilet.latitude, toilet.longitude))
           .map((toilet) => {
@@ -338,6 +577,7 @@ function App() {
       {selectedToilet && (
         <LocationModal
           toilet={selectedToilet}
+          session={session}
           onClose={() => {
             setSelectedToilet(null);
             setShowDirections(false);
@@ -356,6 +596,12 @@ function App() {
           }}
         />
       )}
+
+      <SlideMenu 
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        session={session}
+      />
     </div>
   )
 }
