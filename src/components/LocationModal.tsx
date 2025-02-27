@@ -1,14 +1,17 @@
 import { FiNavigation, FiX, FiMapPin } from 'react-icons/fi';
 import './LocationModal.css';
 import { Toilet } from '../types.ts';
+import { Session } from '@supabase/supabase-js';
 
 interface LocationModalProps {
   toilet: Toilet;
   onClose: () => void;
   onGetDirections: (destination: { lat: string; lng: string }) => void;
+  session: Session | null;
+  onEdit?: (updates: Partial<Toilet>) => void;
 }
 
-export function LocationModal({ toilet, onClose, onGetDirections }: LocationModalProps) {
+export function LocationModal({ toilet, onClose, onGetDirections, session, onEdit }: LocationModalProps) {
   const handleDirectionsClick = () => {
     onGetDirections({
       lat: toilet.latitude,
@@ -77,6 +80,18 @@ export function LocationModal({ toilet, onClose, onGetDirections }: LocationModa
             <div className="additional-notes">
               <h4>Additional Notes</h4>
               <p>{toilet.additional_notes}</p>
+            </div>
+          )}
+
+          {/* Show edit button only if user is authenticated and owns the entry */}
+          {session && toilet.user_id === session.user.id && (
+            <div className="edit-controls">
+              <button 
+                className="edit-button"
+                onClick={() => {/* Add edit functionality */}}
+              >
+                Edit Location
+              </button>
             </div>
           )}
         </div>
